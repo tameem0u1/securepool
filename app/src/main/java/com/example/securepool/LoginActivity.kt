@@ -7,25 +7,33 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
 import com.example.securepool.api.RetrofitClient
-import com.example.securepool.model.RegisterRequest
-import com.example.securepool.model.ScoreResponse
+import com.example.securepool.model.*
 import com.example.securepool.ui.theme.SecurePoolTheme
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.Duration
+import java.util.*
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SecurePoolTheme {
-                LoginScreen()
-            }
+            SecurePoolTheme { LoginScreen() }
         }
     }
 }
@@ -34,6 +42,8 @@ class LoginActivity : ComponentActivity() {
 @Composable
 fun LoginScreen() {
     var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isPasswordVisible by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -54,30 +64,71 @@ fun LoginScreen() {
                     singleLine = true
                 )
 
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val icon = if (isPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
+                        IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                            Icon(icon, contentDescription = null)
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                )
+
                 Button(onClick = {
-                    if (username.isBlank()) {
-                        Toast.makeText(context, "Please enter a username", Toast.LENGTH_SHORT).show()
+                    if (username.isBlank() || password.isBlank()) {
+                        Toast.makeText(context, "Enter both fields", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
 
                     scope.launch {
                         try {
-                            // Register the user (idempotent backend behavior)
-                            RetrofitClient.apiService.registerUser(RegisterRequest(username))
+                            val request = RegisterRequest(username, password)
+                            val loginResponse = RetrofitClient.apiService.loginUser(request)
+                            val loginBody = loginResponse.body()
 
-                            // Fetch user score
-                            val response = RetrofitClient.apiService.getScore(username)
-                            if (response.isSuccessful) {
-                                val scoreData: ScoreResponse? = response.body()
-                                val score = scoreData?.score ?: 100
+                            if (loginResponse.isSuccessful && loginBody?.success == true) {
+                                val scoreRes = RetrofitClient.apiService.getScore(username)
+                                val scoreData = scoreRes.body()
 
                                 PlayerData.username = username
-                                PlayerData.score = score
-                                PlayerData.firstLoginTime = System.currentTimeMillis()
+                                PlayerData.score = scoreData?.score ?: 100
+                                PlayerData.lastZeroTimestamp = scoreData?.lastZeroTimestamp
 
-                                context.startActivity(Intent(context, MainActivity::class.java))
+                                if (PlayerData.score == 0 && PlayerData.lastZeroTimestamp != null) {
+                                    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
+                                    val past = try {
+                                        LocalDateTime.parse(PlayerData.lastZeroTimestamp, fmt)
+                                    } catch (_: Exception) { null }
+
+                                    if (past != null) {
+                                        val elapsed = Duration.between(past, LocalDateTime.now()).toMinutes()
+                                        if (elapsed >= 2) {
+                                            val restoreRes = RetrofitClient.apiService.restoreScore(request)
+                                            if (restoreRes.isSuccessful) {
+                                                val newScore = RetrofitClient.apiService.getScore(username).body()?.score ?: 100
+                                                PlayerData.score = newScore
+                                                PlayerData.lastZeroTimestamp = null
+                                            }
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "Out of points – Train up – Your score will recharge to 100 after 24h.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                }
+
+                                val intent = Intent(context, MainActivity::class.java)
+                                intent.putExtra("mode", "home")
+                                context.startActivity(intent)
                             } else {
-                                Toast.makeText(context, "Failed to retrieve user score", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Login failed", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -85,6 +136,14 @@ fun LoginScreen() {
                     }
                 }) {
                     Text("Login")
+                }
+
+                TextButton(onClick = {
+                    val intent = Intent(context, MainActivity::class.java)
+                    intent.putExtra("mode", "signup")
+                    context.startActivity(intent)
+                }) {
+                    Text("Create Account")
                 }
             }
         }

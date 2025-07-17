@@ -5,4 +5,5 @@ object PlayerData {
     var score: Int = 0
     var firstLoginTime: Long = 0L
     var opponent: String = ""
+    var lastZeroTimestamp: String? = null
 }

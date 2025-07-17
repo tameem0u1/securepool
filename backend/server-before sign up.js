@@ -1,7 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const moment = require('moment'); // ⏱️ Timestamp formatting
+const moment = require('moment'); // ⏱️ Added for formatting timestamps
 
 const app = express();
 app.use(cors());
@@ -26,26 +26,16 @@ app.get('/', (req, res) => {
   res.send('🔗 SecurePool backend is running');
 });
 
-// 🔐 Register new user (reject duplicates)
+// 🔐 Register with username + password
 app.post('/api/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
-  const checkSql = 'SELECT * FROM users WHERE username = ?';
-  db.query(checkSql, [username], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Query error' });
-
-    if (results.length > 0) {
-      return res.json({ success: false }); // 🚫 Username already exists
-    }
-
-    const insertSql = 'INSERT INTO users SET username = ?, password = ?, score = 100';
-    db.query(insertSql, [username, password], err2 => {
-      if (err2) return res.status(500).json({ success: false });
-      res.json({ success: true });
-    });
+  const sql = 'INSERT IGNORE INTO users SET username = ?, password = ?, score = 100';
+  db.query(sql, [username, password], err => {
+    res.json({ success: !err });
   });
 });
 

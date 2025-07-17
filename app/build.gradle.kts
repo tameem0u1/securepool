@@ -59,6 +59,9 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
+    // ✅ Material Icons (🔧 Added for Visibility toggles)
+    implementation("androidx.compose.material:material-icons-extended:1.6.0")
+
     // ✅ Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

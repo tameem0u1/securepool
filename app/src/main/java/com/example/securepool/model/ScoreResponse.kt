@@ -1,3 +1,7 @@
 package com.example.securepool.model
 
-data class ScoreResponse(val score: Int)
+data class ScoreResponse(
+    val username: String,
+    val score: Int,
+    val lastZeroTimestamp: String?
+)

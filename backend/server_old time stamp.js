@@ -1,7 +1,6 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const moment = require('moment'); // ⏱️ Timestamp formatting
 
 const app = express();
 app.use(cors());
@@ -26,26 +25,16 @@ app.get('/', (req, res) => {
   res.send('🔗 SecurePool backend is running');
 });
 
-// 🔐 Register new user (reject duplicates)
+// 🔐 Register with username + password
 app.post('/api/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
-  const checkSql = 'SELECT * FROM users WHERE username = ?';
-  db.query(checkSql, [username], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Query error' });
-
-    if (results.length > 0) {
-      return res.json({ success: false }); // 🚫 Username already exists
-    }
-
-    const insertSql = 'INSERT INTO users SET username = ?, password = ?, score = 100';
-    db.query(insertSql, [username, password], err2 => {
-      if (err2) return res.status(500).json({ success: false });
-      res.json({ success: true });
-    });
+  const sql = 'INSERT IGNORE INTO users SET username = ?, password = ?, score = 100';
+  db.query(sql, [username, password], err => {
+    res.json({ success: !err });
   });
 });
 
@@ -65,7 +54,7 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// 📊 Get score + formatted timestamp
+// 📊 Get score + timestamp
 app.get('/api/score', (req, res) => {
   const { username } = req.query;
   if (!username) {
@@ -77,17 +66,7 @@ app.get('/api/score', (req, res) => {
     if (err || results.length === 0) {
       return res.status(500).json({ error: 'User not found or query failed' });
     }
-
-    const player = results[0];
-    const formattedTimestamp = player.lastZeroTimestamp
-      ? moment(player.lastZeroTimestamp).format('YYYY-MM-DD HH:mm:ss')
-      : null;
-
-    res.json({
-      username: player.username,
-      score: player.score,
-      lastZeroTimestamp: formattedTimestamp
-    });
+    res.json(results[0]);
   });
 });
 

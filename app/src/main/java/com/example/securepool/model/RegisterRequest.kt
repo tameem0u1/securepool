@@ -1,3 +1,7 @@
 package com.example.securepool.model
 
-data class RegisterRequest(val username: String)
+data class RegisterRequest(
+    val username: String,
+    val password: String
+)
+

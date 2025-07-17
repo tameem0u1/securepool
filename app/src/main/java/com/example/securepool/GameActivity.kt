@@ -13,8 +13,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.securepool.api.RetrofitClient
 import com.example.securepool.model.MatchResultRequest
+import com.example.securepool.model.RegisterRequest
 import com.example.securepool.ui.theme.SecurePoolTheme
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.Duration
+import java.util.*
 
 class GameActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,9 +44,50 @@ fun GameScreen(onEnd: () -> Unit) {
 
     var playerScore by remember { mutableStateOf(PlayerData.score) }
     var opponentScore by remember { mutableStateOf(100) }
+    var cooldownText by remember { mutableStateOf("") }
+
+    // 🆕 Fetch opponent's real score on entry
+    LaunchedEffect(opponent) {
+        scope.launch {
+            try {
+                val res = RetrofitClient.apiService.getScore(opponent)
+                if (res.isSuccessful) {
+                    opponentScore = res.body()?.score ?: 100
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ⏳ Cooldown Check
+    LaunchedEffect(Unit) {
+        if (playerScore == 0 && PlayerData.lastZeroTimestamp != null) {
+            val ready = isCooldownComplete(PlayerData.lastZeroTimestamp!!)
+            if (ready) {
+                try {
+                    val req = RegisterRequest(player, "placeholder")
+                    val res = RetrofitClient.apiService.restoreScore(req)
+                    if (res.isSuccessful) {
+                        playerScore = 100
+                        cooldownText = ""
+                        PlayerData.score = 100
+                        PlayerData.lastZeroTimestamp = null
+                    }
+                } catch (_: Exception) {}
+            } else {
+                cooldownText = """
+                    Out of points.
+                    Train up!
+                    Your score will recharge to 100 after 24h.
+                """.trimIndent()
+            }
+        }
+    }
 
     fun applyAndSyncScores(outcome: String) {
         PlayerData.score = playerScore
+        if (playerScore == 0) {
+            PlayerData.lastZeroTimestamp = getCurrentTimestamp()
+        }
 
         val result = when (outcome) {
             "win" -> MatchResultRequest(player, opponent, "win")
@@ -76,6 +122,7 @@ fun GameScreen(onEnd: () -> Unit) {
             ) {
                 Text("$player Score: $playerScore", style = MaterialTheme.typography.bodyLarge)
                 Text("$opponent Score: $opponentScore", style = MaterialTheme.typography.bodyLarge)
+                if (cooldownText.isNotEmpty()) Text(cooldownText)
 
                 Button(onClick = {
                     playerScore += 10
@@ -103,4 +150,19 @@ fun GameScreen(onEnd: () -> Unit) {
             }
         }
     )
+}
+
+fun isCooldownComplete(timestamp: String): Boolean {
+    return try {
+        val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val past = LocalDateTime.parse(timestamp, fmt)
+        Duration.between(past, LocalDateTime.now()).toMinutes() >= 2
+    } catch (_: Exception) {
+        false
+    }
+}
+
+fun getCurrentTimestamp(): String {
+    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
+    return LocalDateTime.now().format(fmt)
 }
