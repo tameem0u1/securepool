@@ -7,6 +7,8 @@ const app = express();
 app.use(cors());
 app.use(json());
 
+const database_name = "securepool_db";
+
 // Connect to your local MySQL server
 
 const db = await initializeDatabase();
