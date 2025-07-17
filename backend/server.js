@@ -1,26 +1,15 @@
-const express = require('express');
-const mysql = require('mysql2');
-const cors = require('cors');
-const moment = require('moment'); // ⏱️ Timestamp formatting
+import express, { json } from 'express';
+import cors from 'cors';
+import moment from 'moment'; // ⏱️ Timestamp formatting
+import initializeDatabase from './initializeDatabase.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(json());
 
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'abcdef',
-  database: 'securepool_db'
-});
+// Connect to your local MySQL server
 
-db.connect(err => {
-  if (err) {
-    console.error('❌ MySQL connection failed:', err.message);
-    process.exit(1);
-  }
-  console.log('✅ Connected to MySQL');
-});
+const db = await initializeDatabase();
 
 app.get('/', (req, res) => {
   res.send('🔗 SecurePool backend is running');
