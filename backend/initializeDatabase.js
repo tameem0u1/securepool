@@ -2,6 +2,13 @@ import { createConnection } from 'mysql2/promise';
 
 const database_name = "securepool_db";
 
+const connectionProperties = {
+            host: 'localhost',
+            port: 3306,
+            user: 'root',
+            password: 'abcdef', // 🔒 Replace with your actual password
+        }
+
 const createTableQuery = `
     CREATE TABLE users (
         username VARCHAR(100) PRIMARY KEY,
@@ -27,11 +34,7 @@ export default async function initializeDatabase() {
     let connection;
     try {
         // Establish a connection to the database
-        connection = await createConnection({
-            host: 'localhost',
-            user: 'root',
-            password: 'abcdef', // 🔒 Replace with your actual password
-        });
+        connection = await createConnection(connectionProperties);
         console.log('Connected to MySQL database.');
 
         await connection.execute(`CREATE DATABASE IF NOT EXISTS ${database_name}`);
