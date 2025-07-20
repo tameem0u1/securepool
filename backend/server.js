@@ -2,10 +2,17 @@ import express, { json } from 'express';
 import cors from 'cors';
 import moment from 'moment'; // ⏱️ Timestamp formatting
 import initializeDatabase from './initializeDatabase.js';
+import https from 'https';
+import fs from 'fs';
 
 const app = express();
 app.use(cors());
 app.use(json());
+
+const options = {
+  key: fs.readFileSync('./dev_cert/securepool_key.pem'),
+  cert: fs.readFileSync('./dev_cert/securepool_cert.pem')
+};
 
 app.use((req, res, next) => {
   console.log(`request received: ${req.method} ${req.url} ${JSON.stringify(req.body)}`);
@@ -160,6 +167,12 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-app.listen(8080, '0.0.0.0', () => {
-  console.log('🚀 Server running on port 8080');
+const server = https.createServer(options, app);
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+server.listen(443, '0.0.0.0', () => {
+  console.log('🚀 Server running on port 443');
 });
