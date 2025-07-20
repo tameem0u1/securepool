@@ -92,12 +92,10 @@ fun LoginScreen() {
                             val loginBody = loginResponse.body()
 
                             if (loginResponse.isSuccessful && loginBody?.success == true) {
-                                val scoreRes = RetrofitClient.apiService.getScore(username)
-                                val scoreData = scoreRes.body()
 
-                                PlayerData.username = username
-                                PlayerData.score = scoreData?.score ?: 100
-                                PlayerData.lastZeroTimestamp = scoreData?.lastZeroTimestamp
+                                PlayerData.username = loginBody.username
+                                PlayerData.score = loginBody.score
+                                PlayerData.lastZeroTimestamp = loginBody.lastZeroTimestamp
 
                                 if (PlayerData.score == 0 && PlayerData.lastZeroTimestamp != null) {
                                     val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)

@@ -9,7 +9,7 @@ interface SecurePoolService {
     suspend fun registerUser(@Body request: RegisterRequest): Response<RegisterResponse>
 
     @POST("/api/login")
-    suspend fun loginUser(@Body request: RegisterRequest): Response<RegisterResponse>
+    suspend fun loginUser(@Body request: RegisterRequest): Response<LoginResponse>
 
     @GET("/api/score")
     suspend fun getScore(@Query("username") username: String): Response<ScoreResponse>
