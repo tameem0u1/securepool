@@ -14,8 +14,7 @@ Purpose: To design an insecure Android application, identify and model threats, 
 ## Backend Server  
 - From the `backend` directory, run `npm install`  
 - Update the `connectionProperties` object in `initializeDatabase.js` to the correct port, user, and password for your MySQL installation (insecure hard coded credentials will be patched in v2).  
-- Make a directory to hold a development https certificate `mkdir .cert`  
-- `cd .cert`  
+- `cd dev_cert`  
 - Generate a private key and certificate for use in development  
 `openssl req -x509 -newkey rsa:4096 -keyout securepool_key.pem -out securepool_cert.pem -sha256 -days 365 -nodes -subj "/C=US/ST=California/L=Mountain View/O=AndroidDev/CN=localhost" -addext "subjectAltName = DNS:localhost,IP:10.0.2.2"`  
 - Run `npm run start`  

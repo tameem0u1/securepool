@@ -1,30 +1,32 @@
 package com.example.securepool
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.securepool.api.RetrofitClient
-import com.example.securepool.model.LeaderboardEntry
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.securepool.ui.model.LeaderboardUiState
+import com.example.securepool.ui.model.LeaderboardViewModel
 import com.example.securepool.ui.theme.SecurePoolTheme
-import kotlinx.coroutines.launch
 
 class LeaderboardActivity : ComponentActivity() {
+    private val viewModel: LeaderboardViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
             SecurePoolTheme {
-                LeaderboardScreen()
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                LeaderboardScreen(uiState = uiState)
             }
         }
     }
@@ -32,57 +34,39 @@ class LeaderboardActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LeaderboardScreen() {
-    val context = LocalContext.current
-    val username = PlayerData.username
-    val scope = rememberCoroutineScope()
-
-    var leaderboard by remember { mutableStateOf<List<LeaderboardEntry>>(emptyList()) }
-    var isLoaded by remember { mutableStateOf(false) }
-
-    // ✅ Fetch leaderboard from backend
-    LaunchedEffect(Unit) {
-        try {
-            val response = RetrofitClient.apiService.getLeaderboard()
-            if (response.isSuccessful) {
-                leaderboard = response.body() ?: emptyList()
-                isLoaded = true
-            } else {
-                Toast.makeText(context, "Failed to load leaderboard", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
+fun LeaderboardScreen(uiState: LeaderboardUiState) {
     Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Leaderboard — Logged in as $username") })
-        },
-        content = { padding ->
-            if (!isLoaded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = androidx.compose.ui.Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    leaderboard.forEach {
-                        Text("${it.username}: ${it.score} pts", style = MaterialTheme.typography.bodyLarge)
+        topBar = { TopAppBar(title = { Text("Leaderboard") }) }
+    ) { padding ->
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            // Use LazyColumn for better performance with lists
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.leaderboard) { entry ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(entry.username, style = MaterialTheme.typography.bodyLarge)
+                            Text("${entry.score} pts")
+                        }
                     }
                 }
             }
         }
-    )
+    }
 }

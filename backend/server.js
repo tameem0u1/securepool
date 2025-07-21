@@ -4,6 +4,8 @@ import moment from 'moment'; // ⏱️ Timestamp formatting
 import initializeDatabase from './initializeDatabase.js';
 import https from 'https';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 const app = express();
 app.use(cors());
@@ -12,6 +14,29 @@ app.use(json());
 const options = {
   key: fs.readFileSync('./dev_cert/securepool_key.pem'),
   cert: fs.readFileSync('./dev_cert/securepool_cert.pem')
+};
+
+// TODO: Replace these with unique secret keys from environment variables
+const JWT_SECRET = 'your-super-secret-key-for-jwt';
+const JWT_EXPIRATION = '15m';
+const REFRESH_TOKEN_SECRET = 'your-super-secret-refresh-key';
+
+const verifyJwt = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) {
+    return res.status(401).json({ message: 'No token provided.' });
+  }
+
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    console.log(`JWT verified for user: ${user.id}`);
+    req.user = user; // Add decoded user payload to request object
+    next();
+  } catch (err) {
+    return res.status(403).json({ message: 'Token is invalid or expired.' });
+  }
 };
 
 app.use((req, res, next) => {
@@ -32,6 +57,9 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
+  const salt = await bcrypt.genSalt(10);
+  const pwHash = await bcrypt.hash(password, salt);
+
   try {
     const checkSql = 'SELECT * FROM users WHERE username = ?';
     const [existingUsers] = await db.query(checkSql, [username]);
@@ -41,7 +69,7 @@ app.post('/api/register', async (req, res) => {
     }
 
     const insertSql = 'INSERT INTO users SET username = ?, password = ?, score = 100';
-    await db.query(insertSql, [username, password]);
+    await db.query(insertSql, [username, pwHash]);
 
     res.json({ success: true });
 
@@ -58,19 +86,28 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
-  const sql = 'SELECT * FROM users WHERE username = ? AND password = ?';
+  const sql = 'SELECT * FROM users WHERE username = ?';
 
   try {
-    const [results] = await db.query(sql, [username, password]);
+    const [results] = await db.query(sql, [username]);
     if (results.length === 0) {
-      return res.json({ success: false });
+      return res.json({ success: isMatch });
     }
     const user = results[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.json({ success: false });
+    }
+    const accessToken = jwt.sign({ id: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+    const refreshToken = jwt.sign({ id: user.username }, REFRESH_TOKEN_SECRET);
+
     res.json({
       success: true,
       username: user.username,
       score: user.score,
-      lastZeroTimestamp: user.lastZeroTimestamp
+      lastZeroTimestamp: user.lastZeroTimestamp,
+      accessToken,
+      refreshToken
     });
   } catch (error) {
     console.error('Error executing login query:', error);
@@ -79,7 +116,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // 📊 Get score + formatted timestamp
-app.get('/api/score', async (req, res) => {
+app.get('/api/score', verifyJwt, async (req, res) => {
   const { username } = req.query;
   if (!username) {
     return res.status(400).json({ error: 'Missing username' });
@@ -108,7 +145,7 @@ app.get('/api/score', async (req, res) => {
   }
 });
 
-app.post('/api/matchResult', async (req, res) => {
+app.post('/api/matchResult', verifyJwt, async (req, res) => {
   const { winner, loser, outcome } = req.body;
   if (!winner || !loser || !outcome) {
     return res.status(400).json({ error: 'Missing match data' });
@@ -134,7 +171,7 @@ app.post('/api/matchResult', async (req, res) => {
   }
 });
 
-app.post('/api/restore-score', async (req, res) => {
+app.post('/api/restore-score', verifyJwt, async (req, res) => {
   const { username } = req.body;
   if (!username) {
     return res.status(400).json({ error: 'Missing username' });
@@ -152,7 +189,7 @@ app.post('/api/restore-score', async (req, res) => {
   }
 });
 
-app.get('/api/leaderboard', async (req, res) => {
+app.get('/api/leaderboard', verifyJwt, async (req, res) => {
   const sql = 'SELECT username, score FROM users ORDER BY score DESC LIMIT 10';
   try {
     const [rows] = await db.query(sql);
@@ -164,6 +201,25 @@ app.get('/api/leaderboard', async (req, res) => {
   catch (err) {
     console.error('Error fetching leaderboard:', err);
     return res.status(500).json({ error: 'Leaderboard error' });
+  }
+});
+
+app.post('api/token/refresh', (req, res) => {
+  const { token } = req.body;
+  if (token == null) return res.sendStatus(401);
+
+  const user = Object.values(userStore).find(u => u.refreshToken === token);
+  if (!user) return res.status(403).json({ message: 'Refresh token is invalid.' });
+
+  try {
+    const decodedUser = jwt.verify(token, REFRESH_TOKEN_SECRET);
+    if (user.username !== decodedUser.id) {
+      return res.status(403).json({ message: 'Refresh token is invalid.' });
+    }
+    const accessToken = jwt.sign({ id: decodedUser.id }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+    res.json({ accessToken, refreshToken: user.refreshToken });
+  } catch (err) {
+    res.status(403).json({ message: 'Refresh token is invalid or expired.' });
   }
 });
 

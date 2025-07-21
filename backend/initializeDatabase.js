@@ -1,4 +1,5 @@
 import { createConnection } from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 
 const database_name = "securepool_db";
 
@@ -18,13 +19,20 @@ const createTableQuery = `
     );
 `;
 
+let salt = await bcrypt.genSalt(10);
+const gamer1pw = await bcrypt.hash('a123', salt);
+const gamer2pw = await bcrypt.hash('b123', salt);
+const gamer3pw = await bcrypt.hash('c123', salt);
+const gamer4pw = await bcrypt.hash('d123', salt);
+const gamer5pw = await bcrypt.hash('e123', salt);
+
 const seedUsersQuery = `
     INSERT INTO users (username, password, score, lastZeroTimestamp) VALUES
-    ('gamerA', 'a123', 100, NULL),
-    ('gamerB', 'b123', 100, NULL),
-    ('gamerC', 'c123', 100, NULL),
-    ('gamerD', 'd123', 100, NULL),
-    ('gamerE', 'e123', 100, NULL);
+    ('gamerA', '${gamer1pw}', 100, NULL),
+    ('gamerB', '${gamer2pw}', 100, NULL),
+    ('gamerC', '${gamer3pw}', 100, NULL),
+    ('gamerD', '${gamer4pw}', 100, NULL),
+    ('gamerE', '${gamer5pw}', 100, NULL);
 `;
 
 /**
