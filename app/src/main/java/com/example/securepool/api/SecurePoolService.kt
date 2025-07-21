@@ -22,4 +22,7 @@ interface SecurePoolService {
 
     @POST("/api/matchResult")
     suspend fun sendMatchResult(@Body result: MatchResultRequest): Response<Unit>
+
+    @POST("/api/token/refresh")
+    suspend fun refreshToken(@Body request: RefreshTokenRequest): Response<RefreshTokenResponse>
 }
