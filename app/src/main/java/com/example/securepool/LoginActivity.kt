@@ -2,10 +2,9 @@ package com.example.securepool
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -14,136 +13,104 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.securepool.api.RetrofitClient
-import com.example.securepool.model.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.securepool.ui.model.LoginUiState
+import com.example.securepool.ui.model.LoginViewModel
 import com.example.securepool.ui.theme.SecurePoolTheme
-import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.time.Duration
-import java.util.*
+import com.example.securepool.ui.NavigationEvent
 
 class LoginActivity : ComponentActivity() {
+    private val viewModel: LoginViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
-            SecurePoolTheme { LoginScreen() }
+            SecurePoolTheme {
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+                // Listen for one-time navigation events
+                LaunchedEffect(Unit) {
+                    viewModel.navigationEvent.collect { event ->
+                        when (event) {
+                            is NavigationEvent.NavigateToHome -> {
+                                val intent = Intent(this@LoginActivity, MainActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                }
+                                startActivity(intent)
+                            }
+                            else -> {} // Ignore other events
+                        }
+                    }
+                }
+
+                LoginScreen(
+                    uiState = uiState,
+                    // Pass all event handlers to the stateless screen
+                    onUsernameChange = viewModel::onUsernameChange,
+                    onPasswordChange = viewModel::onPasswordChange,
+                    onPasswordVisibilityChange = viewModel::onPasswordVisibilityChange,
+                    onLoginClicked = viewModel::loginUser
+                )
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen() {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isPasswordVisible by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
+fun LoginScreen(
+    uiState: LoginUiState,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onPasswordVisibilityChange: (Boolean) -> Unit,
+    onLoginClicked: () -> Unit
+) {
+    // This composable no longer holds any state. It's fully controlled by the ViewModel.
     Scaffold(
         topBar = { TopAppBar(title = { Text("SecurePool Login") }) },
-        content = { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(24.dp)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(24.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedTextField(
+                value = uiState.username, // Read value from state
+                onValueChange = onUsernameChange, // Call lambda on change
+                label = { Text("Username") },
+                singleLine = true,
+                enabled = !uiState.isLoading
+            )
+
+            OutlinedTextField(
+                value = uiState.password, // Read value from state
+                onValueChange = onPasswordChange, // Call lambda on change
+                label = { Text("Password") },
+                singleLine = true,
+                enabled = !uiState.isLoading,
+                visualTransformation = if (uiState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    val icon = if (uiState.isPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
+                    IconButton(onClick = { onPasswordVisibilityChange(!uiState.isPasswordVisible) }) {
+                        Icon(icon, "Toggle password visibility")
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+            )
+
+            Button(
+                onClick = onLoginClicked, // Call lambda on click
+                enabled = !uiState.isLoading
             ) {
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Enter Gamer Username") },
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        val icon = if (isPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
-                        IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                            Icon(icon, contentDescription = null)
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
-                )
-
-                Button(onClick = {
-                    if (username.isBlank() || password.isBlank()) {
-                        Toast.makeText(context, "Enter both fields", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-
-                    scope.launch {
-                        try {
-                            val request = RegisterRequest(username, password)
-                            val loginResponse = RetrofitClient.apiService.loginUser(request)
-                            val loginBody = loginResponse.body()
-
-                            if (loginResponse.isSuccessful && loginBody?.success == true) {
-
-                                PlayerData.username = loginBody.username
-                                PlayerData.score = loginBody.score
-                                PlayerData.lastZeroTimestamp = loginBody.lastZeroTimestamp
-
-                                if (PlayerData.score == 0 && PlayerData.lastZeroTimestamp != null) {
-                                    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
-                                    val past = try {
-                                        LocalDateTime.parse(PlayerData.lastZeroTimestamp, fmt)
-                                    } catch (_: Exception) { null }
-
-                                    if (past != null) {
-                                        val elapsed = Duration.between(past, LocalDateTime.now()).toMinutes()
-                                        if (elapsed >= 2) {
-                                            val restoreRes = RetrofitClient.apiService.restoreScore(request)
-                                            if (restoreRes.isSuccessful) {
-                                                val newScore = RetrofitClient.apiService.getScore(username).body()?.score ?: 100
-                                                PlayerData.score = newScore
-                                                PlayerData.lastZeroTimestamp = null
-                                            }
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                "Out of points – Train up – Your score will recharge to 100 after 24h.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    }
-                                }
-
-                                val intent = Intent(context, MainActivity::class.java)
-                                intent.putExtra("mode", "home")
-                                context.startActivity(intent)
-                            } else {
-                                Toast.makeText(context, "Login failed", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                } else {
                     Text("Login")
-                }
-
-                TextButton(onClick = {
-                    val intent = Intent(context, MainActivity::class.java)
-                    intent.putExtra("mode", "signup")
-                    context.startActivity(intent)
-                }) {
-                    Text("Create Account")
                 }
             }
         }
-    )
+    }
 }
