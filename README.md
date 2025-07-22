@@ -17,5 +17,5 @@ Purpose: To design an insecure Android application, identify and model threats, 
 - Run `npm run start`  
 
 ## Android Application
-- Copy `securepool_cert.pem` generated in the Backend Server setup to your emulated Android device in Android Studio by dragging it to the virtual device's screen.  
+- Copy `securepool_cert.pem` from `backend\dev_cert` to your emulated Android device in Android Studio by dragging it to the virtual device's screen.  
 - Install the certificate on the Android device `Settings > Security > Encryption & credentials > Install a certificate > CA Certificate` and locate `securepool_cert.pem`  
