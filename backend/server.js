@@ -98,6 +98,7 @@ app.post('/api/login', async (req, res) => {
     if (!isMatch) {
       return res.json({ success: false });
     }
+    
     const accessToken = jwt.sign({ id: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
     const refreshToken = jwt.sign({ id: user.username }, REFRESH_TOKEN_SECRET);
 
