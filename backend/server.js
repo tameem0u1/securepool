@@ -5,6 +5,7 @@ import initializeDatabase from './initializeDatabase.js';
 import https from 'https';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 const app = express();
 app.use(cors());
@@ -56,6 +57,9 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
+  const salt = await bcrypt.genSalt(10);
+  const pwHash = await bcrypt.hash(password, salt);
+
   try {
     const checkSql = 'SELECT * FROM users WHERE username = ?';
     const [existingUsers] = await db.query(checkSql, [username]);
@@ -65,7 +69,7 @@ app.post('/api/register', async (req, res) => {
     }
 
     const insertSql = 'INSERT INTO users SET username = ?, password = ?, score = 100';
-    await db.query(insertSql, [username, password]);
+    await db.query(insertSql, [username, pwHash]);
 
     res.json({ success: true });
 
@@ -82,14 +86,19 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Missing credentials' });
   }
 
-  const sql = 'SELECT * FROM users WHERE username = ? AND password = ?';
+  const sql = 'SELECT * FROM users WHERE username = ?';
 
   try {
-    const [results] = await db.query(sql, [username, password]);
+    const [results] = await db.query(sql, [username]);
     if (results.length === 0) {
-      return res.json({ success: false });
+      return res.json({ success: isMatch });
     }
     const user = results[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.json({ success: false });
+    }
+    
     const accessToken = jwt.sign({ id: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
     const refreshToken = jwt.sign({ id: user.username }, REFRESH_TOKEN_SECRET);
 

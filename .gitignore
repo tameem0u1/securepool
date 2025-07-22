@@ -14,4 +14,4 @@
 .cxx
 local.properties
 node_modules/
-.cert/
+dev_cert/
